@@ -23,10 +23,18 @@ import java.util.Properties;
 import org.hyperledger.fabric.sdk.exception.CryptoException;
 import org.hyperledger.fabric.sdk.exception.InvalidArgumentException;
 
+import fgodinho.threshsig.*;
+
 /**
  * All packages for PKI key creation/signing/verification implement this interface
  */
 public interface CryptoSuite {
+
+  // FGODINHO
+    void switchSignatureMethod(int method);
+    void setThreshSigGroupKey(byte[] groupKeyBytes);
+    boolean isThreshSigEnabled();
+    GroupKey getGroupKey();
 
     /**
      * Get Crypto Suite Factory for this implementation.

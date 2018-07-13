@@ -317,7 +317,7 @@
                     <failOnViolation>true</failOnViolation>
                     <failsOnError>true</failsOnError>
                     <sourceDirectory>${project.build.sourceDirectory}</sourceDirectory>
-                    <configLocation>checkstyle-config.xml</configLocation>
+                    <configLocation>checkstyle-config-lenient.xml</configLocation>
                     <includeTestSourceDirectory>true</includeTestSourceDirectory>
                 </configuration>
             </plugin>

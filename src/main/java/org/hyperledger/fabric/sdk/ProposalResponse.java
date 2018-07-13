@@ -5,6 +5,7 @@
 */
 package org.hyperledger.fabric.sdk;
 
+
 import java.lang.ref.WeakReference;
 
 import javax.xml.bind.DatatypeConverter;
@@ -84,6 +85,12 @@ public class ProposalResponse extends ChaincodeResponse {
         return isVerified;
     }
 
+    // WARNING: ONLY TO BE USED FOR THRESHIG
+    // FGODINHO
+    public void setVerified() {
+      isVerified = true;
+    }
+
     /*
      * Verifies that a Proposal response is properly signed. The payload is the
      * concatenation of the response payload byte string and the endorsement The
@@ -130,12 +137,10 @@ public class ProposalResponse extends ChaincodeResponse {
 
             }
 
-            // FGODINHO TODO this has to adapt to whether we're using thresh sig or multisig
-            this.isVerified = true;
-            /*crypto.verify(endorser.getIdBytes().toByteArray(), config.getSignatureAlgorithm(),
+            this.isVerified = crypto.verify(endorser.getIdBytes().toByteArray(), config.getSignatureAlgorithm(),
                     sig.toByteArray(), plainText.toByteArray()
-            );*/
-        } catch (InvalidProtocolBufferException e) { //| CryptoException e) {
+            );
+        } catch (InvalidProtocolBufferException | CryptoException e) {
             logger.error("verify: Cannot retrieve peer identity from ProposalResponse. Error is: " + e.getMessage(), e);
             this.isVerified = false;
         }

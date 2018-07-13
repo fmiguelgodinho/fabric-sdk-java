@@ -94,6 +94,8 @@ import org.hyperledger.fabric.sdk.helper.DiagnosticFileDumper;
 import static java.lang.String.format;
 import static org.hyperledger.fabric.sdk.helper.Utils.isNullOrEmpty;
 
+import fgodinho.threshsig.*;
+
 public class CryptoPrimitives implements CryptoSuite {
     private static final Log logger = LogFactory.getLog(CryptoPrimitives.class);
     private static final Config config = Config.getConfig();
@@ -112,6 +114,12 @@ public class CryptoPrimitives implements CryptoSuite {
 
     private Map<Integer, String> securityCurveMapping = config.getSecurityCurveMapping();
 
+
+    // FGODINHO
+    private GroupKey gk;
+    private boolean useThreshSig = false;
+    // /FGODINHO
+
     // Following configuration settings are hardcoded as they don't deal with any interactions with Fabric MSP and BCCSP components
     // If you wish to make these customizable, follow the logic from setProperties();
     //TODO May need this for TCERTS ?
@@ -121,6 +129,25 @@ public class CryptoPrimitives implements CryptoSuite {
 //    private int SYMMETRIC_KEY_BYTE_COUNT = 32;
 //    private String SYMMETRIC_ALGORITHM = "AES/CFB/NoPadding";
 //    private int MAC_KEY_BYTE_COUNT = 32;
+
+    public boolean isThreshSigEnabled() {
+      return useThreshSig;
+    }
+
+    public GroupKey getGroupKey() {
+      return gk;
+    }
+
+    public void setThreshSigGroupKey(byte[] groupKeyBytes) {
+      gk = GroupKey.fromBytes(groupKeyBytes);
+    }
+
+    public void switchSignatureMethod(int method) {
+      if (method == 0)
+         useThreshSig = false;
+      else if (method == 1)
+         useThreshSig = true;
+    }
 
     public CryptoPrimitives() throws ClassNotFoundException, IllegalAccessException, InstantiationException {
         String securityProviderClassName = config.getSecurityProviderClassName();

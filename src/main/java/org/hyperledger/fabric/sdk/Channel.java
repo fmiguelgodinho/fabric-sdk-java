@@ -120,6 +120,14 @@ import static org.hyperledger.fabric.sdk.helper.Utils.isNullOrEmpty;
 import static org.hyperledger.fabric.sdk.transaction.ProtoUtils.createSeekInfoEnvelope;
 import static org.hyperledger.fabric.sdk.transaction.ProtoUtils.getSignatureHeaderAsByteString;
 
+import fgodinho.threshsig.*;
+
+
+import java.util.Base64;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import org.hyperledger.fabric.sdk.security.CryptoSuite;
+
 /**
  * The class representing a channel with which the client SDK interacts.
  * <p>
@@ -2772,14 +2780,70 @@ public class Channel implements Serializable {
             proposalResponse.setPeer(peerFuturePair.peer);
 
             if (fabricResponse != null && transactionContext.getVerify()) {
+              // FGODINHO here proposals are verified for standard multisig
+              if (!client.getCryptoSuite().isThreshSigEnabled()) {
                 proposalResponse.verify(client.getCryptoSuite());
+              }
             }
 
             proposalResponses.add(proposalResponse);
         }
 
+        // FGODINHO here proposals are verified for threshsig
+        if (client.getCryptoSuite().isThreshSigEnabled()) {
+            verifyThreshSig(client.getCryptoSuite(), proposalResponses);
+        }
         return proposalResponses;
     }
+
+// FGODINHO
+    private void verifyThreshSig(CryptoSuite crypto, Collection<ProposalResponse> responses) {
+
+        // load group key from cryptoSuite
+        GroupKey gk = crypto.getGroupKey();
+
+        // get sig shares from proposal responses
+        List<SigShare> sigShares = new ArrayList<SigShare>(responses.size());
+        byte[] payload = null;
+        for (ProposalResponse rsp: responses) {
+          payload = rsp.getProposalResponse().getPayload().toByteArray();
+          SigShare share = SigShare.fromBytes(rsp.getProposalResponse().getEndorsement().getSignature().toByteArray());
+          sigShares.add(share);
+        }
+
+        SigShare[] sigs = null;
+        // get only the threshold
+        if (sigShares.size() == gk.getK()) {
+          sigs = new SigShare[sigShares.size()];
+        } else {
+          // calculate excess and allocate only needed size
+          int excess = Math.abs(gk.getK()-sigShares.size());
+          sigs = new SigShare[sigShares.size() - excess];
+          // remove excess
+          for (int i = 0; i < excess; i++) {
+            sigShares.remove(i);
+          }
+        }
+        // if lower than k, it will fail the sig verification
+
+        // hash the msg and pass it through b64 as the blockchain peers do
+        try {
+          MessageDigest md = MessageDigest.getInstance("SHA-1");
+          byte[] digest = Base64.getUrlEncoder().encode(md.digest(payload));
+
+          // verify
+          boolean verified = SigShare.verify(digest, sigShares.toArray(sigs), gk.getK(), gk.getL(), gk.getModulus(), gk.getExponent());
+          if (verified) {
+            for (ProposalResponse rsp: responses) {
+              rsp.setVerified();
+            }
+          }
+
+        } catch (NoSuchAlgorithmException e) {
+          e.printStackTrace();
+        }
+    }
+//FGODINHO
 
     /**
      * Send transaction to one of the orderers on the channel using a specific user context.
