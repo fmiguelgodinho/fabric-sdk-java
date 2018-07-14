@@ -122,7 +122,10 @@ import static org.hyperledger.fabric.sdk.transaction.ProtoUtils.getSignatureHead
 
 import fgodinho.threshsig.*;
 
-
+import javax.json.Json;
+import javax.json.JsonObject;
+import javax.json.JsonReader;
+import java.io.StringReader;
 import java.util.Base64;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -180,6 +183,14 @@ public class Channel implements Serializable {
     //Cleans up any transaction listeners that will probably never complete.
     private transient ScheduledFuture<?> sweeper = null;
     private transient String blh = null;
+
+    // FGODINHO
+    // temporary flag for when a getContractDefinition chaincode fn gets called
+    private boolean getContractCall = false;
+
+    public void signalGetContractCall() {
+      getContractCall = true;
+    }
 
     {
         for (Peer.PeerRole peerRole : EnumSet.allOf(PeerRole.class)) {
@@ -2779,6 +2790,20 @@ public class Channel implements Serializable {
             proposalResponse.setProposal(signedProposal);
             proposalResponse.setPeer(peerFuturePair.peer);
 
+            // FGODINHO
+            if (getContractCall) {
+
+              // first we read the payload
+              String contractString = proposalResponse.getProposalResponse().getResponse().getPayload().toStringUtf8();
+              int sigMethod = getSignatureMethodFromContract(contractString);
+              // set sigmethod
+              client.getCryptoSuite().switchSignatureMethod(sigMethod);
+
+              // turn of contract call flag
+              // this will only run once
+              getContractCall = false;
+            }
+
             if (fabricResponse != null && transactionContext.getVerify()) {
               // FGODINHO here proposals are verified for standard multisig
               if (!client.getCryptoSuite().isThreshSigEnabled()) {
@@ -2793,10 +2818,40 @@ public class Channel implements Serializable {
         if (client.getCryptoSuite().isThreshSigEnabled()) {
             verifyThreshSig(client.getCryptoSuite(), proposalResponses);
         }
+
         return proposalResponses;
     }
 
 // FGODINHO
+
+    private static int getSignatureMethodFromContract(String contractString) throws InvalidArgumentException {
+
+      // get json contract
+      JsonReader jsonReader = Json.createReader(new StringReader(contractString));
+      JsonObject contractObj = jsonReader.readObject();
+      jsonReader.close();
+
+      // get extended properties
+      JsonObject extPropsObj = contractObj.getJsonObject("extended-contract-properties");
+      if (extPropsObj == null) {
+        throw new InvalidArgumentException("Contract is invalid and does not conform to standard: Missing extended contract properties section!");
+      }
+
+      // get sig method
+      String sigMethodSpec = extPropsObj.getString("signature-type");
+      if (sigMethodSpec == null || sigMethodSpec.isEmpty()) {
+        throw new InvalidArgumentException("Contract is invalid and does not conform to standard: Missing signature type property!");
+      }
+
+      if (sigMethodSpec.equals("multisig"))
+        return 0;
+
+      if (sigMethodSpec.equals("threshsig"))
+        return 1;
+
+      throw new InvalidArgumentException("Contract is invalid and does not conform to standard: Unknown signature type!");
+    }
+
     private void verifyThreshSig(CryptoSuite crypto, Collection<ProposalResponse> responses) {
 
         // load group key from cryptoSuite
