@@ -2866,19 +2866,7 @@ public class Channel implements Serializable {
           sigShares.add(share);
         }
 
-        SigShare[] sigs = null;
-        // get only the threshold
-        if (sigShares.size() == gk.getK()) {
-          sigs = new SigShare[sigShares.size()];
-        } else {
-          // calculate excess and allocate only needed size
-          int excess = Math.abs(gk.getK()-sigShares.size());
-          sigs = new SigShare[sigShares.size() - excess];
-          // remove excess
-          for (int i = 0; i < excess; i++) {
-            sigShares.remove(i);
-          }
-        }
+        SigShare[] sigs = new SigShare[sigShares.size()];
         // if lower than k, it will fail the sig verification
 
         // hash the msg and pass it through b64 as the blockchain peers do
@@ -2887,8 +2875,8 @@ public class Channel implements Serializable {
           byte[] digest = Base64.getUrlEncoder().encode(md.digest(payload));
 
           // verify
-          boolean verified = SigShare.verify(digest, sigShares.toArray(sigs), gk.getK(), gk.getL(), gk.getModulus(), gk.getExponent());
-          if (verified) {
+          //boolean verified = SigShare.verify(digest, sigShares.toArray(sigs), gk.getK(), gk.getL(), gk.getModulus(), gk.getExponent());
+          if (SigShare.verifyCombinations(digest, sigShares.toArray(sigs), gk)) {
             for (ProposalResponse rsp: responses) {
               rsp.setVerified();
             }
