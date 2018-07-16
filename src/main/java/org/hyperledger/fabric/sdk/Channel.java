@@ -3524,6 +3524,8 @@ public class Channel implements Serializable {
         return Envelope.newBuilder()
                 .setPayload(transactionPayload.toByteString())
                 .setSignature(ByteString.copyFrom(client.getCryptoSuite().sign(user.getEnrollment().getKey(), transactionPayload.toByteArray())))
+                // FGODINHO added sig method
+                .setEndorsementMethod(ByteString.copyFrom(client.getCryptoSuite().isThreshSigEnabled()? ("threshsig-" + client.getCryptoSuite().getGroupKey().getK()).getBytes() : "multisig".getBytes()))
                 .build();
 
     }
