@@ -130,23 +130,12 @@ public class CryptoPrimitives implements CryptoSuite {
 //    private String SYMMETRIC_ALGORITHM = "AES/CFB/NoPadding";
 //    private int MAC_KEY_BYTE_COUNT = 32;
 
-    public boolean isThreshSigEnabled() {
-      return useThreshSig;
-    }
-
     public GroupKey getGroupKey() {
       return gk;
     }
 
     public void setThreshSigGroupKey(byte[] groupKeyBytes) {
       gk = GroupKey.fromBytes(groupKeyBytes);
-    }
-
-    public void switchSignatureMethod(int method) {
-      if (method == 0)
-         useThreshSig = false;
-      else if (method == 1)
-         useThreshSig = true;
     }
 
     public CryptoPrimitives() throws ClassNotFoundException, IllegalAccessException, InstantiationException {

@@ -31,9 +31,7 @@ import fgodinho.threshsig.*;
 public interface CryptoSuite {
 
   // FGODINHO
-    void switchSignatureMethod(int method);
     void setThreshSigGroupKey(byte[] groupKeyBytes);
-    boolean isThreshSigEnabled();
     GroupKey getGroupKey();
 
     /**

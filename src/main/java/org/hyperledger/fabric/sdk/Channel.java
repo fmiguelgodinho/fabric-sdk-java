@@ -184,14 +184,6 @@ public class Channel implements Serializable {
     private transient ScheduledFuture<?> sweeper = null;
     private transient String blh = null;
 
-    // FGODINHO
-    // temporary flag for when a getContractDefinition chaincode fn gets called
-    private boolean getContractCall = false;
-
-    public void signalGetContractCall() {
-      getContractCall = true;
-    }
-
     {
         for (Peer.PeerRole peerRole : EnumSet.allOf(PeerRole.class)) {
 
@@ -2742,6 +2734,7 @@ public class Channel implements Serializable {
 
         }
 
+        int sigMethod = -1; // FGODINHO
         Collection<ProposalResponse> proposalResponses = new ArrayList<>();
         for (Pair peerFuturePair : peerFuturePairs) {
 
@@ -2791,22 +2784,24 @@ public class Channel implements Serializable {
             proposalResponse.setPeer(peerFuturePair.peer);
 
             // FGODINHO
-            if (getContractCall) {
+            // get the signature method from proposal response
+            byte[] sigMethodBytes = proposalResponse.getProposalResponse().getEndorsement().getEndorsementMethod().toByteArray();
+            if (sigMethodBytes == null) {
+              throw new InvalidArgumentException("Endorsement method cannot be ommitted from proposal response!");
+            }
+            String sigMethodSpec = new String(sigMethodBytes);
 
-              // first we read the payload
-              String contractString = proposalResponse.getProposalResponse().getResponse().getPayload().toStringUtf8();
-              int sigMethod = getSignatureMethodFromContract(contractString);
-              // set sigmethod
-              client.getCryptoSuite().switchSignatureMethod(sigMethod);
-
-              // turn of contract call flag
-              // this will only run once
-              getContractCall = false;
+            if (sigMethodSpec.equals("multisig")) {
+              sigMethod = 0;
+            } else if (sigMethodSpec.equals("threshsig")) {
+              sigMethod = 1;
+            } else {
+              throw new InvalidArgumentException("Unknown endorsement method!");
             }
 
             if (fabricResponse != null && transactionContext.getVerify()) {
               // FGODINHO here proposals are verified for standard multisig
-              if (!client.getCryptoSuite().isThreshSigEnabled()) {
+              if (sigMethod == 0) {
                 proposalResponse.verify(client.getCryptoSuite());
               }
             }
@@ -2815,7 +2810,9 @@ public class Channel implements Serializable {
         }
 
         // FGODINHO here proposals are verified for threshsig
-        if (client.getCryptoSuite().isThreshSigEnabled()) {
+        // if fore some reason, proposal responses weren't consistent when collecting signatures, this is ok
+        // sig share verification will fail in that case
+        if (sigMethod == 1) {
             verifyThreshSig(client.getCryptoSuite(), proposalResponses);
         }
 
@@ -2824,33 +2821,33 @@ public class Channel implements Serializable {
 
 // FGODINHO
 
-    private static int getSignatureMethodFromContract(String contractString) throws InvalidArgumentException {
-
-      // get json contract
-      JsonReader jsonReader = Json.createReader(new StringReader(contractString));
-      JsonObject contractObj = jsonReader.readObject();
-      jsonReader.close();
-
-      // get extended properties
-      JsonObject extPropsObj = contractObj.getJsonObject("extended-contract-properties");
-      if (extPropsObj == null) {
-        throw new InvalidArgumentException("Contract is invalid and does not conform to standard: Missing extended contract properties section!");
-      }
-
-      // get sig method
-      String sigMethodSpec = extPropsObj.getString("signature-type");
-      if (sigMethodSpec == null || sigMethodSpec.isEmpty()) {
-        throw new InvalidArgumentException("Contract is invalid and does not conform to standard: Missing signature type property!");
-      }
-
-      if (sigMethodSpec.equals("multisig"))
-        return 0;
-
-      if (sigMethodSpec.equals("threshsig"))
-        return 1;
-
-      throw new InvalidArgumentException("Contract is invalid and does not conform to standard: Unknown signature type!");
-    }
+    // private static int getSignatureMethodFromContract(String contractString) throws InvalidArgumentException {
+    //
+    //   // get json contract
+    //   JsonReader jsonReader = Json.createReader(new StringReader(contractString));
+    //   JsonObject contractObj = jsonReader.readObject();
+    //   jsonReader.close();
+    //
+    //   // get extended properties
+    //   JsonObject extPropsObj = contractObj.getJsonObject("extended-contract-properties");
+    //   if (extPropsObj == null) {
+    //     throw new InvalidArgumentException("Contract is invalid and does not conform to standard: Missing extended contract properties section!");
+    //   }
+    //
+    //   // get sig method
+    //   String sigMethodSpec = extPropsObj.getString("signature-type");
+    //   if (sigMethodSpec == null || sigMethodSpec.isEmpty()) {
+    //     throw new InvalidArgumentException("Contract is invalid and does not conform to standard: Missing signature type property!");
+    //   }
+    //
+    //   if (sigMethodSpec.equals("multisig"))
+    //     return 0;
+    //
+    //   if (sigMethodSpec.equals("threshsig"))
+    //     return 1;
+    //
+    //   throw new InvalidArgumentException("Contract is invalid and does not conform to standard: Unknown signature type!");
+    // }
 
     private void verifyThreshSig(CryptoSuite crypto, Collection<ProposalResponse> responses) {
 
@@ -3336,6 +3333,24 @@ public class Channel implements Serializable {
                 }
             }
 
+            // FGODINHO
+            // we go straight to the first proposal response to get its endorsement method
+            // as consistency groups are evaluated further above, we are sure that endorsement method is consistent
+            byte[] sigMethodBytes = ed.get(0).getEndorsementMethod().toByteArray();
+            String sigMethodSpec = new String(sigMethodBytes);
+            if (sigMethodBytes == null) {
+              throw new InvalidArgumentException("Endorsement method cannot be ommitted from proposal response!");
+            }
+            int sigMethod = -1;
+            if (sigMethodSpec.equals("multisig")) {
+              sigMethod = 0;
+            } else if (sigMethodSpec.equals("threshsig")) {
+              sigMethod = 1;
+            } else {
+              throw new InvalidArgumentException("Unknown endorsement method!");
+            }
+            // /FGODINHO
+
             TransactionBuilder transactionBuilder = TransactionBuilder.newBuilder();
 
             Payload transactionPayload = transactionBuilder
@@ -3343,7 +3358,7 @@ public class Channel implements Serializable {
                     .endorsements(ed)
                     .proposalResponsePayload(proposalResponsePayload).build();
 
-            Envelope transactionEnvelope = createTransactionEnvelope(transactionPayload, userContext);
+            Envelope transactionEnvelope = createTransactionEnvelope(transactionPayload, userContext, sigMethod); // FGODINHO
 
             NOfEvents nOfEvents = transactionOptions.nOfEvents;
 
@@ -3507,13 +3522,13 @@ public class Channel implements Serializable {
 
     }
 
-    private Envelope createTransactionEnvelope(Payload transactionPayload, User user) throws CryptoException {
+    private Envelope createTransactionEnvelope(Payload transactionPayload, User user, int sigMethod) throws CryptoException {
 
         return Envelope.newBuilder()
                 .setPayload(transactionPayload.toByteString())
                 .setSignature(ByteString.copyFrom(client.getCryptoSuite().sign(user.getEnrollment().getKey(), transactionPayload.toByteArray())))
                 // FGODINHO added sig method
-                .setEndorsementMethod(ByteString.copyFrom(client.getCryptoSuite().isThreshSigEnabled()? ("threshsig-" + client.getCryptoSuite().getGroupKey().getK()).getBytes() : "multisig".getBytes()))
+                .setEndorsementMethod(ByteString.copyFrom(sigMethod == 1? ("threshsig-" + client.getCryptoSuite().getGroupKey().getK()).getBytes() : "multisig".getBytes()))
                 .build();
 
     }
