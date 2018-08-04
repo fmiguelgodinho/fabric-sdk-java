@@ -659,7 +659,7 @@ public class HFClient {
 
     }
 
-    void removeChannel(Channel channel) {
+    public void removeChannel(Channel channel) {
         synchronized (channels) {
             final String name = channel.getName();
             if (channels.get(name) == channel) { // Only remove if it's the same instance.
