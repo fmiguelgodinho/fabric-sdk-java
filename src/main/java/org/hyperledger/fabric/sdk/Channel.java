@@ -2853,6 +2853,7 @@ public class Channel implements Serializable {
 
         // load group key from cryptoSuite
         GroupKey gk = crypto.getGroupKey();
+        System.out.println("Verifying threshold signature. Group key = " + gk.toString());
 
         // get sig shares from proposal responses
         List<SigShare> sigShares = new ArrayList<SigShare>(responses.size());
@@ -2877,6 +2878,8 @@ public class Channel implements Serializable {
             for (ProposalResponse rsp: responses) {
               rsp.setVerified();
             }
+          }else{
+              System.out.println("Threshold signatures were not valid!"); //miguel to remove
           }
 
         } catch (NoSuchAlgorithmException e) {
